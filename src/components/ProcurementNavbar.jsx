@@ -9,12 +9,15 @@ import {
   Languages, 
   Menu, 
   X,
+  LogIn,
+  UserPlus,
   Radio,
   Clock,
   Layers,
   Sparkles
 } from 'lucide-react';
 import { languages } from '../data/translations';
+import { t } from '../data/i18n';
 
 export default function ProcurementNavbar({ 
   currentRole, 
@@ -22,15 +25,17 @@ export default function ProcurementNavbar({
   currentLang, 
   setCurrentLang, 
   onOpenBookModal,
+  onOpenAuthModal,
   activeTokensCount 
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const text = (key) => t(currentLang, key);
 
   const roles = [
-    { id: 'public', label: 'Public Portal & Live Queue', shortLabel: 'Live Queue', icon: Radio },
-    { id: 'farmer', label: 'Farmer Portal', shortLabel: 'Farmer Portal', icon: User },
-    { id: 'staff', label: 'Mandi Staff Console', shortLabel: 'Staff Console', icon: Scale },
-    { id: 'admin', label: 'District Administration', shortLabel: 'District Admin', icon: Building2 }
+    { id: 'public', label: text('publicPortal'), icon: Radio },
+    { id: 'farmer', label: text('farmerPortal'), icon: User },
+    { id: 'staff', label: text('staffConsole'), icon: Scale },
+    { id: 'admin', label: text('districtAdmin'), icon: Building2 }
   ];
 
   return (
@@ -49,7 +54,7 @@ export default function ProcurementNavbar({
           </div>
           <div className="helpline-badge">
             <PhoneCall size={13} />
-            <span>Mandi Control Room: <b>1800-180-1551</b> (Toll Free)</span>
+            <span>{text('controlRoom')} <b>1800-180-1551</b> ({text('tollFree')})</span>
           </div>
         </div>
       </div>
@@ -66,7 +71,7 @@ export default function ProcurementNavbar({
               <div className="logo-title">
                 Kisan<span className="logo-highlight">Setu</span>
               </div>
-              <div className="logo-subtitle">Smart Mandi Procurement & Queue Management</div>
+              <div className="logo-subtitle">{text('queueManagement')}</div>
             </div>
           </div>
 
@@ -107,13 +112,24 @@ export default function ProcurementNavbar({
               </select>
             </div>
 
+            <div className="auth-nav-actions">
+              <button onClick={() => onOpenAuthModal('login')} className="btn-login">
+                <LogIn size={16} />
+                <span>{text('login')}</span>
+              </button>
+              <button onClick={() => onOpenAuthModal('register')} className="btn-register">
+                <UserPlus size={16} />
+                <span>{text('register')}</span>
+              </button>
+            </div>
+
             {/* Quick Action: Book Slot */}
             <button
               onClick={onOpenBookModal}
               className="btn-primary nav-post-btn"
             >
               <PlusCircle size={17} />
-              <span>Book Slot</span>
+              <span>{text('bookSlot')}</span>
             </button>
 
             {/* Mobile menu toggle */}
@@ -132,7 +148,7 @@ export default function ProcurementNavbar({
       {mobileMenuOpen && (
         <div className="mobile-drawer animate-fade">
           <div className="mobile-drawer-links">
-            <span className="mobile-drawer-heading">Select Portal:</span>
+            <span className="mobile-drawer-heading">{text('selectPortal')}</span>
             {roles.map((r) => {
               const Icon = r.icon;
               const isActive = currentRole === r.id;
@@ -158,8 +174,12 @@ export default function ProcurementNavbar({
               className="btn-primary mobile-drawer-post-btn"
             >
               <PlusCircle size={18} />
-              <span>Book Procurement Slot</span>
+              <span>{text('bookProcurementSlot')}</span>
             </button>
+            <div className="mobile-auth-actions">
+              <button onClick={() => { onOpenAuthModal('login'); setMobileMenuOpen(false); }} className="btn-login"><LogIn size={17} /> {text('login')}</button>
+              <button onClick={() => { onOpenAuthModal('register'); setMobileMenuOpen(false); }} className="btn-register"><UserPlus size={17} /> {text('register')}</button>
+            </div>
           </div>
         </div>
       )}

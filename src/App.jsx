@@ -1,15 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import './App.css';
 import ProcurementNavbar from './components/ProcurementNavbar';
 import ProcurementHome from './components/ProcurementHome';
 import FarmerPortal from './components/FarmerPortal';
 import StaffConsole from './components/StaffConsole';
 import DistrictAdmin from './components/DistrictAdmin';
+import LoginPage from './components/LoginPage';
 
 // Modals
 import BookSlotModal from './components/Modals/BookSlotModal';
 import GatePassModal from './components/Modals/GatePassModal';
 import ReceiptModal from './components/Modals/ReceiptModal';
+import AuthModal from './components/Modals/AuthModal';
+import { t } from './data/i18n';
+import { getSession, clearSession } from './data/authData';
+import { bookingApi, bookingForUi } from './services/api';
+import NotificationBell from './components/NotificationBell';
 
 import { 
   getStoredTokens, 
@@ -23,7 +29,23 @@ import {
 
 export default function App() {
   const [currentRole, setCurrentRole] = useState('public'); // 'public', 'farmer', 'staff', 'admin'
-  const [currentLang, setCurrentLang] = useState('en');
+  const [currentUser, setCurrentUser] = useState(getSession);
+  const [currentLang, setCurrentLang] = useState(() => {
+    try {
+      return localStorage.getItem('kisansetu-language') || 'en';
+    } catch {
+      return 'en';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kisansetu-language', currentLang);
+    } catch {
+      // Continue without persistence when browser storage is unavailable.
+    }
+    document.documentElement.lang = currentLang;
+  }, [currentLang]);
   
   // Persistent Queue Tokens & Receipts
   const [tokens, setTokens] = useState(getStoredTokens);
@@ -37,6 +59,8 @@ export default function App() {
   
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
 
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -48,20 +72,25 @@ export default function App() {
   };
 
   // 1. Book Slot Action
-  const handleBookSlot = (newToken) => {
-    const updated = [newToken, ...tokens];
-    setTokens(updated);
-    saveStoredTokens(updated);
-    showToast(`🌾 Token ${newToken.tokenNumber} issued for ${newToken.vehicleNumber}!`);
-    setSelectedTokenForPass(newToken);
+  useEffect(() => {
+    if (currentUser) bookingApi.list().then((rows) => setTokens(rows.map(bookingForUi))).catch((error) => showToast(`Unable to load live bookings: ${error.message}`));
+  }, [currentUser]);
+
+  const handleBookSlot = async (newToken) => {
+    const saved = bookingForUi(await bookingApi.create({ mandiId: newToken.mandiId, cropId: newToken.cropId, vehicleNumber: newToken.vehicleNumber, vehicleType: newToken.vehicleType, estimatedQuantityQtl: newToken.estimatedQuantityQtl, scheduledDate: newToken.scheduledDate, scheduledSlot: newToken.scheduledSlot, location: { state: newToken.state, district: newToken.district, taluk: newToken.taluk, village: newToken.village } }));
+    setTokens((current) => [saved, ...current]);
+    showToast(`Booking ${saved.tokenNumber} submitted for approval.`);
+    setSelectedTokenForPass(saved);
+    return saved;
   };
 
   // 2. Gate Check-In Action
-  const handleCheckInToken = (tokenId) => {
+  const handleCheckInToken = async (tokenId) => {
+    const saved = bookingForUi(await bookingApi.status(tokenId, { status: 'IN_YARD', note: 'Gate arrival verified' }));
     const updated = tokens.map((t) => {
       if (t.id === tokenId) {
         return {
-          ...t,
+          ...t, ...saved,
           status: 'IN_YARD',
           gateCheckInTime: 'Just Now',
           estimatedWaitMins: 15
@@ -76,11 +105,12 @@ export default function App() {
   };
 
   // 3. Token Calling Action
-  const handleCallToken = (tokenId, bayName) => {
+  const handleCallToken = async (tokenId, bayName) => {
+    const saved = bookingForUi(await bookingApi.status(tokenId, { status: 'CALLED', currentBay: bayName, note: `Called to ${bayName}` }));
     const updated = tokens.map((t) => {
       if (t.id === tokenId) {
         return {
-          ...t,
+          ...t, ...saved,
           status: 'CALLED',
           currentBay: bayName,
           estimatedWaitMins: 2
@@ -95,7 +125,8 @@ export default function App() {
   };
 
   // 4. Complete Weighment Action
-  const handleCompleteWeighment = (tokenId, receiptData) => {
+  const handleCompleteWeighment = async (tokenId, receiptData) => {
+    await bookingApi.procurement(tokenId, { grossWeightKg: receiptData.grossWeightKg, tareWeightKg: receiptData.tareWeightKg, moisturePercent: receiptData.moisturePercent, mspRate: receiptData.mspRate });
     // Mark token completed
     const updatedTokens = tokens.map((t) => {
       if (t.id === tokenId) {
@@ -125,6 +156,41 @@ export default function App() {
     showToast('✓ MSP and Daily Quotas updated across system.');
   };
 
+  const handleUpdateToken = async (tokenId, changes) => {
+    const saved = bookingForUi(await bookingApi.status(tokenId, { status: changes.status, currentBay: changes.currentBay, rejectionReason: changes.rejectionReason, note: changes.note }));
+    setTokens((current) => current.map((token) => token.id === tokenId ? { ...token, ...saved } : token));
+  };
+
+  const handleUpdateReceipt = (slipNumber, changes) => {
+    const updated = receipts.map((receipt) => receipt.slipNumber === slipNumber ? { ...receipt, ...changes } : receipt);
+    setReceipts(updated);
+    saveStoredReceipts(updated);
+  };
+
+  const openAuthModal = (mode) => {
+    setAuthMode(mode);
+    setAuthModalOpen(true);
+  };
+
+  const handleAuthenticate = ({ name, mode }) => {
+    showToast(mode === 'register' ? t(currentLang, 'accountCreated', { name }) : t(currentLang, 'loggedIn'));
+  };
+
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    setCurrentRole(user.role === 'admin' ? 'admin' : user.role === 'staff' ? 'staff' : 'farmer');
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    setCurrentUser(null);
+    setCurrentRole('public');
+  };
+
+  if (!currentUser) {
+    return <LoginPage currentLang={currentLang} onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="app-layout">
       {/* Toast Notification Alert */}
@@ -141,8 +207,10 @@ export default function App() {
         currentLang={currentLang}
         setCurrentLang={setCurrentLang}
         onOpenBookModal={() => setBookModalOpen(true)}
+        onOpenAuthModal={openAuthModal}
         activeTokensCount={tokens.filter((t) => t.status !== 'COMPLETED').length}
       />
+      <NotificationBell />
 
       {/* Main Content Rendered by Role */}
       <main className="container app-content-container">
@@ -191,6 +259,12 @@ export default function App() {
           <DistrictAdmin
             mspRates={mspRates}
             onUpdateMSP={handleUpdateMSP}
+            tokens={tokens}
+            receipts={receipts}
+            onUpdateToken={handleUpdateToken}
+            onUpdateReceipt={handleUpdateReceipt}
+            onNotify={showToast}
+            onLogout={handleLogout}
           />
         )}
       </main>
@@ -212,15 +286,15 @@ export default function App() {
           </div>
 
           <div className="footer-links-col">
-            <h4>System Workspaces</h4>
-            <button onClick={() => setCurrentRole('public')} className="footer-link">Public Live Queue Board</button>
-            <button onClick={() => setCurrentRole('farmer')} className="footer-link">Farmer Booking & Passes</button>
-            <button onClick={() => setCurrentRole('staff')} className="footer-link">Mandi Staff Console</button>
-            <button onClick={() => setCurrentRole('admin')} className="footer-link">District Analytics & MSP</button>
+            <h4>{t(currentLang, 'systemWorkspaces')}</h4>
+            <button onClick={() => setCurrentRole('public')} className="footer-link">{t(currentLang, 'publicQueue')}</button>
+            <button onClick={() => setCurrentRole('farmer')} className="footer-link">{t(currentLang, 'farmerBooking')}</button>
+            <button onClick={() => setCurrentRole('staff')} className="footer-link">{t(currentLang, 'staffWorkspace')}</button>
+            <button onClick={() => setCurrentRole('admin')} className="footer-link">{t(currentLang, 'adminWorkspace')}</button>
           </div>
 
           <div className="footer-links-col">
-            <h4>Integrated Agencies</h4>
+            <h4>{t(currentLang, 'integratedAgencies')}</h4>
             <a href="https://fci.gov.in" target="_blank" rel="noreferrer" className="footer-link">Food Corporation of India (FCI)</a>
             <a href="https://nafed-india.com" target="_blank" rel="noreferrer" className="footer-link">NAFED (PSS Procurement)</a>
             <a href="https://pfms.nic.in" target="_blank" rel="noreferrer" className="footer-link">PFMS Direct Benefit Transfer</a>
@@ -228,7 +302,7 @@ export default function App() {
           </div>
 
           <div className="footer-help-col">
-            <h4>Mandi Control Room & Helpline</h4>
+            <h4>{t(currentLang, 'helpDesk')}</h4>
             <div className="footer-helpline-box">
               <div className="kcc-number">1800-180-1551</div>
               <span className="kcc-sub">Kisan Call Centre & Mandi Queue Redressal (24x7 Toll-Free)</span>
@@ -255,6 +329,17 @@ export default function App() {
         isOpen={receiptModalOpen}
         onClose={() => setReceiptModalOpen(false)}
         receipt={selectedReceipt}
+      />
+      <AuthModal
+        key={authMode}
+        isOpen={authModalOpen}
+        initialMode={authMode}
+        currentLang={currentLang}
+        onClose={() => {
+          setAuthModalOpen(false);
+          setAuthMode('login');
+        }}
+        onAuthenticate={handleAuthenticate}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Calendar, Truck, ShieldCheck, Calculator, Sparkles, CheckCircle2 } from 'lucide-react';
 import { configuredMandis, officialMSPRates } from '../../data/procurementData';
+import { indiaAdministrativeDirectory } from '../../data/indiaAdministrativeDirectory';
 import confetti from 'canvas-confetti';
 
 export default function BookSlotModal({ isOpen, onClose, onBookSlot }) {
@@ -9,7 +10,9 @@ export default function BookSlotModal({ isOpen, onClose, onBookSlot }) {
     farmerAadhaarLast4: '7823',
     phone: '9876543210',
     village: 'Samrala',
+    taluk: 'Khanna',
     district: 'Ludhiana',
+    state: 'Punjab',
     mandiId: 'mandi-khanna',
     crop: 'Wheat (गेहूं)',
     estimatedQuantityQtl: 80,
@@ -27,12 +30,57 @@ export default function BookSlotModal({ isOpen, onClose, onBookSlot }) {
   const selectedCropObj = officialMSPRates.find((c) => c.crop === formData.crop) || officialMSPRates[0];
   const mspRate = selectedCropObj.mspRate;
   const estimatedPayout = (formData.estimatedQuantityQtl || 0) * mspRate;
+  const states = Object.keys(indiaAdministrativeDirectory);
+  const districts = Object.keys(indiaAdministrativeDirectory[formData.state] || {});
+  const taluks = indiaAdministrativeDirectory[formData.state]?.[formData.district] || [];
+  const availableMandis = configuredMandis.filter((mandi) => (
+    mandi.state === formData.state
+    && mandi.district === formData.district
+    && mandi.taluk === formData.taluk
+  ));
+  const hasAvailableMandis = availableMandis.length > 0;
 
-  const handleSubmit = (e) => {
+  const updateLocation = (changes) => setFormData((current) => ({ ...current, ...changes }));
+
+  const handleStateChange = (state) => {
+    const district = Object.keys(indiaAdministrativeDirectory[state] || {})[0] || '';
+    const taluk = indiaAdministrativeDirectory[state]?.[district]?.[0] || '';
+    const mandi = configuredMandis.find((item) => item.state === state && item.district === district && item.taluk === taluk);
+    updateLocation({ state, district, taluk, village: '', mandiId: mandi?.id || '' });
+  };
+
+  const handleDistrictChange = (district) => {
+    const taluk = indiaAdministrativeDirectory[formData.state]?.[district]?.[0] || '';
+    const mandi = configuredMandis.find((item) => item.state === formData.state && item.district === district && item.taluk === taluk);
+    updateLocation({ district, taluk, village: '', mandiId: mandi?.id || '' });
+  };
+
+  const handleTalukChange = (taluk) => {
+    const mandi = configuredMandis.find((item) => (
+      item.state === formData.state
+      && item.district === formData.district
+      && item.taluk === taluk
+    ));
+    updateLocation({ taluk, village: '', mandiId: mandi?.id || '' });
+  };
+
+  const handleMandiChange = (mandiId) => {
+    const mandi = configuredMandis.find((item) => item.id === mandiId);
+    if (!mandi) return;
+    updateLocation({
+      mandiId,
+      state: mandi.state,
+      district: mandi.district,
+      taluk: mandi.taluk
+    });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const tokenSeq = Math.floor(100 + Math.random() * 900);
     const newToken = {
       ...formData,
+      cropId: selectedCropObj.id,
       id: `tok-${Date.now()}`,
       tokenNumber: `KST-${tokenSeq}`,
       mandiName: configuredMandis.find((m) => m.id === formData.mandiId)?.name || 'Khanna Central Grain Market',
@@ -43,8 +91,7 @@ export default function BookSlotModal({ isOpen, onClose, onBookSlot }) {
       priority: 'Normal'
     };
 
-    onBookSlot(newToken);
-    setConfirmedToken(newToken);
+    try { const saved = await onBookSlot(newToken); setConfirmedToken(saved || newToken); } catch (error) { alert(error.message); return; }
 
     try {
       confetti({
@@ -128,7 +175,7 @@ export default function BookSlotModal({ isOpen, onClose, onBookSlot }) {
 
             <div className="form-row two-cols">
               <div className="form-group">
-                <label>Village & District *</label>
+                <label>Village *</label>
                 <input
                   type="text"
                   required
@@ -150,21 +197,47 @@ export default function BookSlotModal({ isOpen, onClose, onBookSlot }) {
               </div>
             </div>
 
+            <div className="form-row three-cols">
+              <div className="form-group">
+                <label>State *</label>
+                <select required value={formData.state} onChange={(e) => handleStateChange(e.target.value)} className="form-select">
+                  {states.map((state) => <option key={state} value={state}>{state}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>District *</label>
+                <select required value={formData.district} onChange={(e) => handleDistrictChange(e.target.value)} className="form-select">
+                  {districts.map((district) => <option key={district} value={district}>{district}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Taluk / Tehsil *</label>
+                <select required value={formData.taluk} onChange={(e) => handleTalukChange(e.target.value)} className="form-select">
+                  {taluks.map((taluk) => <option key={taluk} value={taluk}>{taluk}</option>)}
+                </select>
+              </div>
+            </div>
+
             {/* Mandi & Crop Selection */}
             <div className="form-row two-cols">
               <div className="form-group">
                 <label>Select APMC Procurement Mandi *</label>
                 <select
                   value={formData.mandiId}
-                  onChange={(e) => setFormData({ ...formData, mandiId: e.target.value })}
+                  onChange={(e) => handleMandiChange(e.target.value)}
                   className="form-select"
+                  required
                 >
-                  {configuredMandis.map((m) => (
+                  {!hasAvailableMandis && <option value="">No configured procurement mandi in this district</option>}
+                  {availableMandis.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name} ({m.district}, {m.state})
                     </option>
                   ))}
                 </select>
+                {!hasAvailableMandis && (
+                  <span className="form-hint">Slot booking is available when this district has an active procurement mandi.</span>
+                )}
               </div>
 
               <div className="form-group">

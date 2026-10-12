@@ -1,11 +1,16 @@
 export const languages = [
   { code: 'en', name: 'English', native: 'English', flag: '🇬🇧' },
   { code: 'hi', name: 'Hindi', native: 'हिन्दी', flag: '🇮🇳' },
+  { code: 'bn', name: 'Bengali', native: 'বাংলা', flag: '🌸' },
   { code: 'pb', name: 'Punjabi', native: 'ਪੰਜਾਬੀ', flag: '🌾' },
   { code: 'mr', name: 'Marathi', native: 'मराठी', flag: '🚩' },
   { code: 'te', name: 'Telugu', native: 'తెలుగు', flag: '🌿' },
   { code: 'ta', name: 'Tamil', native: 'தமிழ்', flag: '🍃' },
-  { code: 'gu', name: 'Gujarati', native: 'ગુજરાતી', flag: '🌱' }
+  { code: 'gu', name: 'Gujarati', native: 'ગુજરાતી', flag: '🌱' },
+  { code: 'kn', name: 'Kannada', native: 'ಕನ್ನಡ', flag: '🪷' },
+  { code: 'ml', name: 'Malayalam', native: 'മലയാളം', flag: '🌴' },
+  { code: 'or', name: 'Odia', native: 'ଓଡ଼ିଆ', flag: '🌊' },
+  { code: 'doi', name: 'Dogri', native: 'डोगरी', flag: '🏔️' }
 ];
 
 export const translations = {

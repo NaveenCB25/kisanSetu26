@@ -57,8 +57,12 @@ export default function GatePassModal({ isOpen, onClose, token }) {
                 <span className="pass-val">+91 {token.phone}</span>
               </div>
               <div className="pass-item">
-                <span className="pass-label">Village / District:</span>
-                <span className="pass-val">{token.village}, {token.district}</span>
+                <span className="pass-label">Village / Taluk:</span>
+                <span className="pass-val">{token.village}, {token.taluk || 'Not specified'}</span>
+              </div>
+              <div className="pass-item">
+                <span className="pass-label">District / State:</span>
+                <span className="pass-val">{token.district}{token.state ? `, ${token.state}` : ''}</span>
               </div>
             </div>
 
